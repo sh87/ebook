@@ -16,6 +16,10 @@
                   :themeList="themeList"
                   :defaultTheme="defaultTheme"
                   @setTheme="setTheme"
+                  :bookAvailable="bookAvailable"
+                  @onProgressChange="onProgressChange"
+                  :navigation="navigation"
+                  @jumpTo="jumpTo"
                   ref="menuBar"></menu-bar>
     </div>    
 </template>
@@ -23,7 +27,7 @@
 import TitleBar from '@/components/TitleBar'
 import MenuBar from '@/components/MenuBar'
 import Epub from 'epubjs'
-const DOWNLOAD_URL = 'static/2018_Book_AgileProcessesInSoftwareEngine.epub' 
+const DOWNLOAD_URL = 'static/gamebird.epub' 
 global.epub = Epub
 export default {
     components:{
@@ -77,7 +81,9 @@ export default {
                     }
                 }
             ],
-            defaultTheme:0
+            defaultTheme:0,
+            bookAvailable:false, //电子书是否可用
+            navigation:{}
         }
     },
     methods:{
@@ -93,9 +99,29 @@ export default {
         setFontSize(fontSize){
             this.defaultFontSize = fontSize;
             if(this.themes){
-                console.log(this.themes);
                 this.themes.fontSize(fontSize+"px");
             }
+        },
+        onProgressChange(progress){
+            const percentage = progress/100;
+            const location = percentage>0?this.locations.cfiFromPercentage(percentage):0;
+            //定位到当前位置
+            this.rendition.display(location);
+        },
+        //目录跳转
+        jumpTo(href){
+            this.rendition.display(href);
+            this.hideTilteAndMenu();
+            this.rendition.next().then(()=>{
+                const currentLocation = this.rendition.currentLocation();
+                this.progress = this.locations.percentageFromCfi(currentLocation.start.cfi);
+                this.$refs.menuBar.progress = this.progress<1?this.progress.toFixed(2)*100:1;
+            })
+        },
+        hideTilteAndMenu(){
+            this.ifTitleAndMenuShow = false;
+            this.$refs.menuBar.hideSetting();
+            this.$refs.menuBar.hideContent();
         },
         toggleTitleAndMenu(){
             this.ifTitleAndMenuShow = !this.ifTitleAndMenuShow;
@@ -122,6 +148,16 @@ export default {
             //this.themes.select(name)
             this.registerTheme();
             this.setTheme(this.defaultTheme);
+            //ready 是当book对象初始化完后执行
+            //locations 对象主要是定位
+            //generate() 主要是生成分页
+            this.book.ready.then(()=>{
+                this.navigation = this.book.navigation;
+                return this.book.locations.generate();
+            }).then(()=>{
+                this.locations = this.book.locations; 
+                this.bookAvailable = true;
+            })
         },
         prevPage(){
             if(this.rendition){
